@@ -9,7 +9,12 @@ import tensorflow as tf
 import sys
 import logging
 import json
-
+import time
+# 로거 기본 설정
+logging.basicConfig(
+    level=logging.INFO,  # INFO 이상 메시지를 출력
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 # LSTM + moving-slide + Ensemble
@@ -19,13 +24,19 @@ class Config:
         ROOT_DIR = os.getcwd()
         DB_DIR = os.path.join(ROOT_DIR,'database')
         self.JP_LOTO_FILE = os.path.join(DB_DIR,'japan_loto6.txt')
-        self.SEQUENCE_LENGTH = 50 ## default = 35? 2037 ~ 2004회에 걸쳐서 07이 반복되서 보이는 경향
-        self.RESULT_NUM = np.zeros(43, dtype=int)
+        self.SEQUENCE_LENGTH = 30 ## default = 35? 2037 ~ 2004회에 걸쳐서 07이 반복되서 보이는 경향
+        self.SEQUENCE_LENGTHS = []
+        self.SEQUENCE_LENGTH_COUNT = 10
+        self.SEQUENCE_LENGTH_RANGE = 5
+        self.SEQUENCE_LENGTH_VALUE = 3
+        self.RESULT_NUM = np.zeros(44, dtype=int)
         self.epochs = 100
-        self.patience = 50
-        self.ENSEMBLE_COUNT = 2
+        self.patience = 60
+        self.ENSEMBLE_COUNT = 5
         self.MODEL_ACCURACY = []
         self.MODEL_LOSS = []
+        self.REST_POINT = 0.3
+        self.VALUE_RANDOME_STATE = [7,15,777]
 
 
 class MinimalLogger(tf.keras.callbacks.Callback):
@@ -40,24 +51,25 @@ class MinimalLogger(tf.keras.callbacks.Callback):
         # 훈련이 모두 끝난 후, 줄바꿈을 추가하여 터미널 줄이 깔끔하게 정리되도록 합니다.
         print()
 
-def save_results(results, model_performances, config, filepath="prediction_results.json"):
+def save_results(results, config,acc_ave,loss_ave, filepath="prediction_results.json"):
     """결과를 JSON 파일로 저장"""
     try:
         result_data = {
             "timestamp": pd.Timestamp.now().isoformat(),
             "config": {
-                "sequence_length": config.SEQUENCE_LENGTH,
-                "epochs": config.EPOCHS,
-                "ensemble_count": config.ENSEMBLE_COUNT
+                "SEQUENCE_LENGTH": config.SEQUENCE_LENGTH,
+                "EPOCHS": config.epochs,
+                "ENSEMBLE_COUNT": config.ENSEMBLE_COUNT,
+                "MODEL_ACCURACY": acc_ave,
+                "MODEL_LOSS" : loss_ave,
             },
-            "model_performances": model_performances,
             "final_predictions": results.tolist(),
             "top_10_numbers": results[:10].tolist()
         }
 
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(result_data, f, indent=2, ensure_ascii=False)
-
+            #json.dump(result_data, f, separators=(", ", ": "))
         logger.info(f"결과가 {filepath}에 저장되었습니다.")
 
     except Exception as e:
@@ -122,9 +134,7 @@ def train_model(model, epochs,patience, X_train, X_test, Y_train, Y_test):
 
 
 
-def create_model(input_shape):
-    #print(f"\nstart create model")
-    rest_point = 0.2
+def create_model(input_shape, rest_point):
     model = Sequential([
 
         # UserWarning: Do not pass an `input_shape`/`input_dim` argument to a layer. When using Sequential models, prefer using an `Input(shape)` object as the first layer in the model instead.super().__init__(**kwargs)
@@ -195,56 +205,66 @@ def preprocessing(SEQUENCE_LENGTH, df):
     X, Y = moving_slide(SEQUENCE_LENGTH, numbers_df, processed_number)
     return X, Y
 
+def cal_ave(some_list):
+    a = 0
+    for value in some_list:
+        a += value
+    result = a / len(some_list)
+    return result
 
 def main():
-    print(f"tensor flow are loaded : Version[{tf.__version__}]")
+    print(f"TENSOR-FLOW are loaded : Version[{tf.__version__}]")
     gpu = len(tf.config.list_physical_devices('GPU'))>0
     print("GPU is", "available" if gpu else "NOT AVAILABLE")
+
     config = Config()
     #df = pd.read_csv(database, sep='\s+')
     df = pd.read_csv(config.JP_LOTO_FILE, sep=r'\s+') # if occured SyntaxWarning: invalid escape sequence '\s'
-    for i in range(config.ENSEMBLE_COUNT):
-        print(f"[ENSEMBLE MODEL {i+1}/{config.ENSEMBLE_COUNT}] START TRAIN...")
-        sequence_for_predict = df[['num1', 'num2', 'num3', 'num4', 'num5', 'num6']].sort_index(ascending=False).reset_index(drop=True) 
-        latest_sequence = sequence_for_predict.tail(config.SEQUENCE_LENGTH).values
-        X, Y = preprocessing(config.SEQUENCE_LENGTH,df)
-        X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=7)
-        model = create_model(input_shape=(X_train.shape[1], X_train.shape[2]))
-        #model.summary()
-        trained_model = train_model(model, config.epochs, config.patience, X_train, X_test, Y_train, Y_test)
-        loss, accuracy = trained_model.evaluate(X_test, Y_test, verbose=0)
-        #print(f"최종 테스트 데이터 손실(Loss): {loss:.4f}")
-        #print(f"최종 테스트 데이터 정확도(Accuracy): {accuracy:.4f}")
-        #latest_sequence = X[-1]  # <<< FOR TEST >>>
-        #print(latest_sequence)
-        result = predict_next(trained_model, latest_sequence)
-        config.MODEL_ACCURACY.append(accuracy)
-        config.MODEL_LOSS.append(loss)
-        for num in result:
-            config.RESULT_NUM[num] += 1
+    for i in range(config.SEQUENCE_LENGTH_COUNT):
+        config.SEQUENCE_LENGTHS.append(config.SEQUENCE_LENGTH+(config.SEQUENCE_LENGTH_VALUE*i))
 
-    result = np.argsort(config.RESULT_NUM)[::-1]
-    
-    for i in range(15):
-        number = result[i]
-        frequency = config.RESULT_NUM[number]
-        print(f'{i+1}位　：　番号[{number}], 出現頻度[{frequency}]')
+    logger.info(f"CREATED SEQUENCE_LENGTHS : {config.SEQUENCE_LENGTHS}")
+    for e_range in config.SEQUENCE_LENGTHS:
+        for e_counter in range(config.ENSEMBLE_COUNT):
+            print(f"\n")
+            #logger.info(f"\nSEQUENCE LENGTH = {e_range} \n[ENSEMBLE MODEL {e_counter+1}/{config.ENSEMBLE_COUNT}] START TRAIN...")
+            print(f"\n")
+
+            # 1.preprocessing
+            sequence_for_predict = df[['num1', 'num2', 'num3', 'num4', 'num5', 'num6']].sort_index(ascending=False).reset_index(drop=True) 
+            latest_sequence = sequence_for_predict.tail(config.SEQUENCE_LENGTH).values
+            X, Y = preprocessing(e_range,df)
+
+            # 2.train model
+            for r_s in config.VALUE_RANDOME_STATE:
+                logger.info(f"\n[SEQUENCE LENGTH : {e_range} in {config.SEQUENCE_LENGTHS}]\n[ENSEMBLE COUNTER : {e_counter+1}/{config.ENSEMBLE_COUNT}]\n[VALUE_RANDOME_STATE : {r_s} in {config.VALUE_RANDOME_STATE}]\n")
+                X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=r_s)
+                model = create_model(input_shape=(X_train.shape[1], X_train.shape[2]), rest_point=config.REST_POINT)
+                #model.summary()
+                trained_model = train_model(model, config.epochs, config.patience, X_train, X_test, Y_train, Y_test)
+                loss, accuracy = trained_model.evaluate(X_test, Y_test, verbose=0)
+                
+                # 3.predict number
+                result = predict_next(trained_model, latest_sequence)
+                config.MODEL_ACCURACY.append(accuracy)
+                config.MODEL_LOSS.append(loss)
+                for num in result:
+                    config.RESULT_NUM[num] += 1
+
+        result = np.argsort(config.RESULT_NUM)[::-1]
+        
+        for i in range(15):
+            number = result[i]
+            frequency = config.RESULT_NUM[number]
+            print(f'{i+1}位　：　番号[{number}], 出現頻度[{frequency}]')
 
     print(f"\n=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-")
     print(f'\n最終おすすめ番号達')
     print(f"{result[:10]}")
     print(f"\n=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-")
-
-    config = type("Config", (), {
-        "SEQUENCE_LENGTH": config.SEQUENCE_LENGTH,
-        "EPOCHS": config.epochs,
-        "ENSEMBLE_COUNT": config.ENSEMBLE_COUNT,
-        "MODEL_ACCURACY": config.MODEL_ACCURACY,
-        "MODEL_LOSS" : config.MODEL_LOSS,
-    })()
-
-    model_performances = {"dummy_accuracy": 0.0}  # 필요하다면 실제 accuracy 넣기
-    save_results(result, model_performances, config, filepath="prediction_results.json")
+    acc_ave = cal_ave(config.MODEL_ACCURACY)
+    loss_ave = cal_ave(config.MODEL_LOSS)
+    save_results(result, config, acc_ave, loss_ave,filepath="loto6.json")
 
 if __name__ == '__main__':
     main()

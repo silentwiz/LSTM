@@ -14,7 +14,20 @@ logger = logging.getLogger(__name__)
 
 # LSTM + moving-slide + Ensemble
 
-# 사용자 정의 콜백 클래스 생성
+class Config:
+    def __init__(self):
+        ROOT_DIR = os.getcwd()
+        DB_DIR = os.path.join(ROOT_DIR,'database')
+        self.JP_LOTO_FILE = os.path.join(DB_DIR,'japan_loto6.txt')
+        self.SEQUENCE_LENGTH = 50 ## default = 35? 2037 ~ 2004회에 걸쳐서 07이 반복되서 보이는 경향
+        self.RESULT_NUM = np.zeros(43, dtype=int)
+        self.epochs = 100
+        self.patience = 50
+        self.ENSEMBLE_COUNT = 2
+        self.MODEL_ACCURACY = []
+        self.MODEL_LOSS = []
+
+
 class MinimalLogger(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         # \r은 커서를 줄의 맨 앞으로 이동시켜 줍니다 (덮어쓰기 효과).
@@ -80,7 +93,6 @@ def predict_next(model, latest_data):
     winner_numbers = []
     for num in predicted_numbers[:15]:
         winner_numbers.append(num)
-        winner_numbers.append(',')
     print("\n=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-")
     print(f"おすすめ番号達：{predicted_numbers[:15]}")
     print("=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-")
@@ -158,7 +170,6 @@ def moving_slide(SEQUENCE_LENGTH, numbers_df, processed_number):
     for i in range(len(X_source) - SEQUENCE_LENGTH):
         # 훈련 데이터
         X.append(X_source[i:i+SEQUENCE_LENGTH])
-
         # 정답 데이터
         Y.append(processed_number[i+SEQUENCE_LENGTH])
     X = np.array(X)
@@ -168,10 +179,6 @@ def moving_slide(SEQUENCE_LENGTH, numbers_df, processed_number):
 def preprocessing(SEQUENCE_LENGTH, df):
     ascended_df = df.sort_index(ascending=False)
     ascended_df = ascended_df.reset_index(drop=True) 
-
-    #print(f"df :\n\n{df.head()}\n\n")
-    #print(f"ascended_df :\n\n{ascended_df.head()}\n\n")
-
     numbers_df = ascended_df[['num1', 'num2', 'num3', 'num4', 'num5', 'num6']]
     #print(f"numbers_df :\n\n{numbers_df.head()}\n\n")
 
@@ -189,68 +196,55 @@ def preprocessing(SEQUENCE_LENGTH, df):
     return X, Y
 
 
-
-
 def main():
     print(f"tensor flow are loaded : Version[{tf.__version__}]")
-    ROOT_DIR = os.getcwd()
-    DB_DIR = os.path.join(ROOT_DIR,'database')
-    JP_LOTO_FILE = os.path.join(DB_DIR,'japan_loto6.txt')
-    SEQUENCE_LENGTH = 20 ## default = 35? 2037 ~ 2004회에 걸쳐서 07이 반복되서 보이는 경향
-    SEQUENCE_LENGTHS = []
-    RESULT_NUM = np.zeros(46, dtype=int)
-    epochs = 100
-    patience = 50
-    repeat = 70
-
+    gpu = len(tf.config.list_physical_devices('GPU'))>0
+    print("GPU is", "available" if gpu else "NOT AVAILABLE")
+    config = Config()
     #df = pd.read_csv(database, sep='\s+')
-    df = pd.read_csv(JP_LOTO_FILE, sep=r'\s+') # if occured SyntaxWarning: invalid escape sequence '\s'
-    for i in range(repeat):
-        SEQUENCE_LENGTHS.append(SEQUENCE_LENGTH + (2*i))
-    print(f"DB PATH : {JP_LOTO_FILE}\nSEQUENCE_LENGTHS : {SEQUENCE_LENGTHS}")
-
-    
-    for seq_len in SEQUENCE_LENGTHS:
-        print(f"\n\n- Try to SEQUENCE_LENGTH [{seq_len} in [{SEQUENCE_LENGTHS}]]\n")
+    df = pd.read_csv(config.JP_LOTO_FILE, sep=r'\s+') # if occured SyntaxWarning: invalid escape sequence '\s'
+    for i in range(config.ENSEMBLE_COUNT):
+        print(f"[ENSEMBLE MODEL {i+1}/{config.ENSEMBLE_COUNT}] START TRAIN...")
         sequence_for_predict = df[['num1', 'num2', 'num3', 'num4', 'num5', 'num6']].sort_index(ascending=False).reset_index(drop=True) 
-        latest_sequence = sequence_for_predict.tail(seq_len).values
-        #print(f"latest_sequence :\n {latest_sequence}")
-
-        X, Y = preprocessing(seq_len, df)
-
-        # 1.train_test_split
-        # 준비된 X, Y 데이터셋을 훈련용과 테스트용으로 8:2
+        latest_sequence = sequence_for_predict.tail(config.SEQUENCE_LENGTH).values
+        X, Y = preprocessing(config.SEQUENCE_LENGTH,df)
         X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=7)
-
-        # 2.create the model
         model = create_model(input_shape=(X_train.shape[1], X_train.shape[2]))
         #model.summary()
-
-        # 3.train the model
-        trained_model = train_model(model, epochs, patience, X_train, X_test, Y_train, Y_test)
+        trained_model = train_model(model, config.epochs, config.patience, X_train, X_test, Y_train, Y_test)
         loss, accuracy = trained_model.evaluate(X_test, Y_test, verbose=0)
         #print(f"최종 테스트 데이터 손실(Loss): {loss:.4f}")
         #print(f"최종 테스트 데이터 정확도(Accuracy): {accuracy:.4f}")
         #latest_sequence = X[-1]  # <<< FOR TEST >>>
         #print(latest_sequence)
         result = predict_next(trained_model, latest_sequence)
-
+        config.MODEL_ACCURACY.append(accuracy)
+        config.MODEL_LOSS.append(loss)
         for num in result:
-            RESULT_NUM[num] += 1
-    result = np.argsort(RESULT_NUM)[::-1]
-    print(result)
+            config.RESULT_NUM[num] += 1
 
+    result = np.argsort(config.RESULT_NUM)[::-1]
+    
     for i in range(15):
         number = result[i]
-        frequency = RESULT_NUM[number]
+        frequency = config.RESULT_NUM[number]
         print(f'{i+1}位　：　番号[{number}], 出現頻度[{frequency}]')
 
-    
     print(f"\n=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-")
     print(f'\n最終おすすめ番号達')
     print(f"{result[:10]}")
     print(f"\n=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-")
 
+    config = type("Config", (), {
+        "SEQUENCE_LENGTH": config.SEQUENCE_LENGTH,
+        "EPOCHS": config.epochs,
+        "ENSEMBLE_COUNT": config.ENSEMBLE_COUNT,
+        "MODEL_ACCURACY": config.MODEL_ACCURACY,
+        "MODEL_LOSS" : config.MODEL_LOSS,
+    })()
+
+    model_performances = {"dummy_accuracy": 0.0}  # 필요하다면 실제 accuracy 넣기
+    save_results(result, model_performances, config, filepath="prediction_results.json")
 
 if __name__ == '__main__':
     main()

@@ -237,7 +237,7 @@ def main():
 
             # 2.train model
         
-            logger.info(f"\n[SEQUENCE LENGTH : {e_range} in {config.SEQUENCE_LENGTHS}]\n[ENSEMBLE COUNTER : {e_counter+1}/{config.ENSEMBLE_COUNT}]\n[VALUE_RANDOME_STATE : {r_s} in {config.VALUE_RANDOME_STATE}]\n")
+            logger.info(f"\n[SEQUENCE LENGTH : {e_range} in {config.SEQUENCE_LENGTHS}]\n[ENSEMBLE COUNTER : {e_counter+1}/{config.ENSEMBLE_COUNT}]\n")
 
             # 시간 순서 유지 분할
             split_idx = int(len(X) * 0.8)

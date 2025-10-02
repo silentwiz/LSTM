@@ -1,7 +1,18 @@
 import numpy as np
 
-a = [23, 15, 6, 25, 11, 33, 37, 2, 20, 38]
-b = [6, 10, 36, 18, 19, 22, 38, 42, 3, 23]
+a = [
+    23,
+    15,
+    6,
+    33,
+    25,
+    37,
+    11,
+    38,
+    20,
+    5
+  ]
+b = [2,15,25,27,38,42]
 c = []
 
 a.sort()
@@ -10,7 +21,9 @@ print(f"a : {a}\nb : {b}")
 for num in a:
     if num in b:
         c.append(num)
-print(f'the number is : {c}')
+print(f'the duplicated number is : {c}')
+
+
 
 '''
 d = "[42 6 38 36 23 26 19 16 15 22]"

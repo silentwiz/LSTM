@@ -232,12 +232,14 @@ def main():
 
             # 1.preprocessing
             sequence_for_predict = df[['num1', 'num2', 'num3', 'num4', 'num5', 'num6']].sort_index(ascending=False).reset_index(drop=True) 
-            latest_sequence = sequence_for_predict.tail(config.SEQUENCE_LENGTH).values
+            latest_sequence = sequence_for_predict.tail(e_range).values
             X, Y = preprocessing(e_range,df)
 
             # 2.train model
             for r_s in config.VALUE_RANDOME_STATE:
                 logger.info(f"\n[SEQUENCE LENGTH : {e_range} in {config.SEQUENCE_LENGTHS}]\n[ENSEMBLE COUNTER : {e_counter+1}/{config.ENSEMBLE_COUNT}]\n[VALUE_RANDOME_STATE : {r_s} in {config.VALUE_RANDOME_STATE}]\n")
+
+                
                 X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=r_s)
                 model = create_model(input_shape=(X_train.shape[1], X_train.shape[2]), rest_point=config.REST_POINT)
                 #model.summary()

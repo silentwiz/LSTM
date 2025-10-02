@@ -236,22 +236,25 @@ def main():
             X, Y = preprocessing(e_range,df)
 
             # 2.train model
-            for r_s in config.VALUE_RANDOME_STATE:
-                logger.info(f"\n[SEQUENCE LENGTH : {e_range} in {config.SEQUENCE_LENGTHS}]\n[ENSEMBLE COUNTER : {e_counter+1}/{config.ENSEMBLE_COUNT}]\n[VALUE_RANDOME_STATE : {r_s} in {config.VALUE_RANDOME_STATE}]\n")
+        
+            logger.info(f"\n[SEQUENCE LENGTH : {e_range} in {config.SEQUENCE_LENGTHS}]\n[ENSEMBLE COUNTER : {e_counter+1}/{config.ENSEMBLE_COUNT}]\n[VALUE_RANDOME_STATE : {r_s} in {config.VALUE_RANDOME_STATE}]\n")
 
-                
-                X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=r_s)
-                model = create_model(input_shape=(X_train.shape[1], X_train.shape[2]), rest_point=config.REST_POINT)
-                #model.summary()
-                trained_model = train_model(model, config.epochs, config.patience, X_train, X_test, Y_train, Y_test)
-                loss, accuracy = trained_model.evaluate(X_test, Y_test, verbose=0)
-                
-                # 3.predict number
-                result = predict_next(trained_model, latest_sequence)
-                config.MODEL_ACCURACY.append(accuracy)
-                config.MODEL_LOSS.append(loss)
-                for num in result:
-                    config.RESULT_NUM[num] += 1
+            # 시간 순서 유지 분할
+            split_idx = int(len(X) * 0.8)
+            X_train, X_test = X[:split_idx], X[split_idx:]
+            Y_train, Y_test = Y[:split_idx], Y[split_idx:]
+
+            model = create_model(input_shape=(X_train.shape[1], X_train.shape[2]), rest_point=config.REST_POINT)
+            #model.summary()
+            trained_model = train_model(model, config.epochs, config.patience, X_train, X_test, Y_train, Y_test)
+            loss, accuracy = trained_model.evaluate(X_test, Y_test, verbose=0)
+            
+            # 3.predict number
+            result = predict_next(trained_model, latest_sequence)
+            config.MODEL_ACCURACY.append(accuracy)
+            config.MODEL_LOSS.append(loss)
+            for num in result:
+                config.RESULT_NUM[num] += 1
 
         result = np.argsort(config.RESULT_NUM)[::-1]
         

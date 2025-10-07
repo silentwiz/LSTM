@@ -24,7 +24,7 @@ class Config:
         ROOT_DIR = os.getcwd()
         DB_DIR = os.path.join(ROOT_DIR,'database')
         self.JP_LOTO_FILE = os.path.join(DB_DIR,'japan_loto6.txt')
-        self.SEQUENCE_LENGTH = 30 ## default = 35? 2037 ~ 2004회에 걸쳐서 07이 반복되서 보이는 경향
+        self.SEQUENCE_LENGTH = 35 ## default = 35? 2037 ~ 2004회에 걸쳐서 07이 반복되서 보이는 경향
         self.SEQUENCE_LENGTHS = []
         self.SEQUENCE_LENGTH_COUNT = 11 # List LENGTH
         self.SEQUENCE_LENGTH_RANGE = 5 # not use
@@ -74,6 +74,7 @@ def save_results(results, config,acc_ave,loss_ave, filepath="prediction_results.
             "timestamp": pd.Timestamp.now().isoformat(),
             "config": {
                 "SEQUENCE_LENGTH": config.SEQUENCE_LENGTH,
+                "SEQUENCE_LENGTH_COUNT": config.SEQUENCE_LENGTH_COUNT,
                 "EPOCHS": config.epochs,
                 "ENSEMBLE_COUNT": config.ENSEMBLE_COUNT,
                 "top6_accuracy < baseline : (6/43) x 6 ≈ 0.84 >": acc_ave,
@@ -282,13 +283,14 @@ def main():
         for i in range(10):
             number = result[i]
             frequency = config.RESULT_NUM[number]
-            print(f'{i+1}位　：　番号[{number}], 出現頻度[{(frequency/try_select)*100:.4f}%]')
+            print(f'{i+1}位　：　番号[{number}], 出現頻度[{(frequency/try_select)*100:.2f}%]')
 
     acc_ave = cal_ave(config.MODEL_ACCURACY)
     loss_ave = cal_ave(config.MODEL_LOSS)
     end_cal = time.perf_counter()
-    print(f"実行時間 [{(end_cal - start_cal):.4f}sec], 学習回数 [{try_select}回]")
+
     print(f"\n=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-")
+    print(f"\n実行時間 [{(end_cal - start_cal):.1f}sec], 学習回数 [{try_select}回]")
     print(f'\n最終おすすめ番号達')
     print(f"{list(result[:10])}")
     print(f"モデルの正確度(正解が出る確率)\ntop6_accuracy < baseline : (6/43) x 6 ≈ 0.84 > = {acc_ave},\ntop6_accuracy < baseline : (10/43) x 6 ≈ 1.40 >top_10 = {loss_ave}\n")

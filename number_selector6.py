@@ -6,6 +6,8 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout, Input
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 import tensorflow as tf
+import gc
+from tensorflow.keras import backend as K
 import sys
 import logging
 import json
@@ -24,18 +26,18 @@ class Config:
         ROOT_DIR = os.getcwd()
         DB_DIR = os.path.join(ROOT_DIR,'database')
         self.JP_LOTO_FILE = os.path.join(DB_DIR,'japan_loto6.txt')
-        self.SEQUENCE_LENGTH = 35 ## default = 35? 2037 ~ 2004회에 걸쳐서 07이 반복되서 보이는 경향
+        self.SEQUENCE_LENGTH = 30 ## default = 35? 2037 ~ 2004회에 걸쳐서 07이 반복되서 보이는 경향
         self.SEQUENCE_LENGTHS = []
-        self.SEQUENCE_LENGTH_COUNT = 11 # List LENGTH
-        self.SEQUENCE_LENGTH_RANGE = 5 # not use
-        self.SEQUENCE_LENGTH_VALUE = 5 # distance
+        self.SEQUENCE_LENGTH_COUNT = 25 # List LENGTH
+        #self.SEQUENCE_LENGTH_RANGE = 5 # not use
+        self.SEQUENCE_LENGTH_VALUE = 3 # distance
         self.RESULT_NUM = np.zeros(44, dtype=int)
         self.epochs = 100
         self.patience = 100
         self.ENSEMBLE_COUNT = 30
         self.MODEL_ACCURACY = []
         self.MODEL_LOSS = []
-        self.REST_POINT = 0.3
+        self.REST_POINT = 0.2
         #self.VALUE_RANDOME_STATE = [7,15,777]
 
 
@@ -77,6 +79,7 @@ def save_results(results, config,acc_ave,loss_ave, filepath="prediction_results.
                 "SEQUENCE_LENGTH_COUNT": config.SEQUENCE_LENGTH_COUNT,
                 "EPOCHS": config.epochs,
                 "ENSEMBLE_COUNT": config.ENSEMBLE_COUNT,
+                "REST_POINT": config.REST_POINT,
                 "top6_accuracy < baseline : (6/43) x 6 ≈ 0.84 >": acc_ave,
                 "top10_accuracy < baseline : (10/43) x 6 ≈ 1.40 >" : loss_ave,
             },
@@ -277,6 +280,14 @@ def main():
             for num in result:
                 config.RESULT_NUM[num] += 1
             try_select += 1
+            
+            # === 정리: 모델 객체 제거, 세션 클리어, 가비지 컬렉트 ===
+            trained_model = None
+            model = None
+            K.clear_session()   # keras graph 제거
+            gc.collect()
+            time.sleep(2)
+            # (필요하면 time.sleep(1)로 잠시 쉬게 할 수도 있음)
 
         result = np.argsort(config.RESULT_NUM)[::-1]
         result = result[:15]

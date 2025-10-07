@@ -26,17 +26,17 @@ class Config:
         self.JP_LOTO_FILE = os.path.join(DB_DIR,'japan_loto6.txt')
         self.SEQUENCE_LENGTH = 30 ## default = 35? 2037 ~ 2004회에 걸쳐서 07이 반복되서 보이는 경향
         self.SEQUENCE_LENGTHS = []
-        self.SEQUENCE_LENGTH_COUNT = 10
-        self.SEQUENCE_LENGTH_RANGE = 5
-        self.SEQUENCE_LENGTH_VALUE = 3
+        self.SEQUENCE_LENGTH_COUNT = 11 # List LENGTH
+        self.SEQUENCE_LENGTH_RANGE = 5 # not use
+        self.SEQUENCE_LENGTH_VALUE = 5 # distance
         self.RESULT_NUM = np.zeros(44, dtype=int)
         self.epochs = 100
-        self.patience = 60
-        self.ENSEMBLE_COUNT = 5
+        self.patience = 100
+        self.ENSEMBLE_COUNT = 30
         self.MODEL_ACCURACY = []
         self.MODEL_LOSS = []
         self.REST_POINT = 0.3
-        self.VALUE_RANDOME_STATE = [7,15,777]
+        #self.VALUE_RANDOME_STATE = [7,15,777]
 
 
 class MinimalLogger(tf.keras.callbacks.Callback):
@@ -51,6 +51,22 @@ class MinimalLogger(tf.keras.callbacks.Callback):
         # 훈련이 모두 끝난 후, 줄바꿈을 추가하여 터미널 줄이 깔끔하게 정리되도록 합니다.
         print()
 
+
+def evaluate_top_k(model, X_test, Y_test, k=6):
+    """상위 k개 예측 중 평균 몇 개나 맞췄는지 (개수)"""
+    total_hits = 0
+    for i in range(len(X_test)):
+        prediction = model.predict(X_test[i:i+1], verbose=0)[0][1:]
+        top_k_predicted = np.argsort(prediction)[::-1][:k]
+        actual_numbers = np.where(Y_test[i][1:] == 1)[0]
+
+        hits = len(set(top_k_predicted) & set(actual_numbers))
+        total_hits += hits
+
+    return total_hits / len(X_test)  # 평균 적중 개수
+
+
+
 def save_results(results, config,acc_ave,loss_ave, filepath="prediction_results.json"):
     """결과를 JSON 파일로 저장"""
     try:
@@ -60,8 +76,8 @@ def save_results(results, config,acc_ave,loss_ave, filepath="prediction_results.
                 "SEQUENCE_LENGTH": config.SEQUENCE_LENGTH,
                 "EPOCHS": config.epochs,
                 "ENSEMBLE_COUNT": config.ENSEMBLE_COUNT,
-                "MODEL_ACCURACY": acc_ave,
-                "MODEL_LOSS" : loss_ave,
+                "top6_accuracy < baseline : (6/43) x 6 ≈ 0.84 >": acc_ave,
+                "top10_accuracy < baseline : (10/43) x 6 ≈ 1.40 >" : loss_ave,
             },
             "final_predictions": results.tolist(),
             "top_10_numbers": results[:10].tolist()
@@ -213,17 +229,18 @@ def cal_ave(some_list):
     return result
 
 def main():
+    start_cal = time.perf_counter()
     print(f"TENSOR-FLOW are loaded : Version[{tf.__version__}]")
     gpu = len(tf.config.list_physical_devices('GPU'))>0
     print("GPU is", "available" if gpu else "NOT AVAILABLE")
-
+    try_select = 0
     config = Config()
     #df = pd.read_csv(database, sep='\s+')
     df = pd.read_csv(config.JP_LOTO_FILE, sep=r'\s+') # if occured SyntaxWarning: invalid escape sequence '\s'
     for i in range(config.SEQUENCE_LENGTH_COUNT):
         config.SEQUENCE_LENGTHS.append(config.SEQUENCE_LENGTH+(config.SEQUENCE_LENGTH_VALUE*i))
 
-    logger.info(f"CREATED SEQUENCE_LENGTHS : {config.SEQUENCE_LENGTHS}")
+    logger.info(f"SEQUENCE_LENGTHS CREATED : {config.SEQUENCE_LENGTHS}")
     for e_range in config.SEQUENCE_LENGTHS:
         for e_counter in range(config.ENSEMBLE_COUNT):
             print(f"\n")
@@ -239,7 +256,7 @@ def main():
         
             logger.info(f"\n[SEQUENCE LENGTH : {e_range} in {config.SEQUENCE_LENGTHS}]\n[ENSEMBLE COUNTER : {e_counter+1}/{config.ENSEMBLE_COUNT}]\n")
 
-            # 시간 순서 유지 분할
+            # important! protect the time-line
             split_idx = int(len(X) * 0.8)
             X_train, X_test = X[:split_idx], X[split_idx:]
             Y_train, Y_test = Y[:split_idx], Y[split_idx:]
@@ -247,28 +264,35 @@ def main():
             model = create_model(input_shape=(X_train.shape[1], X_train.shape[2]), rest_point=config.REST_POINT)
             #model.summary()
             trained_model = train_model(model, config.epochs, config.patience, X_train, X_test, Y_train, Y_test)
-            loss, accuracy = trained_model.evaluate(X_test, Y_test, verbose=0)
             
-            # 3.predict number
+            # 3.evaluate model
+            top6_accuracy = evaluate_top_k(trained_model, X_test, Y_test, k=6)
+            top10_accuracy = evaluate_top_k(trained_model, X_test, Y_test, k=10)
+            config.MODEL_ACCURACY.append(top6_accuracy)
+            config.MODEL_LOSS.append(top10_accuracy)
+
+            # 4.predict number
             result = predict_next(trained_model, latest_sequence)
-            config.MODEL_ACCURACY.append(accuracy)
-            config.MODEL_LOSS.append(loss)
             for num in result:
                 config.RESULT_NUM[num] += 1
+            try_select += 1
 
         result = np.argsort(config.RESULT_NUM)[::-1]
-        
-        for i in range(15):
+        result = result[:15]
+        for i in range(10):
             number = result[i]
             frequency = config.RESULT_NUM[number]
-            print(f'{i+1}位　：　番号[{number}], 出現頻度[{frequency}]')
+            print(f'{i+1}位　：　番号[{number}], 出現頻度[{(frequency/try_select)*100:.4f}%]')
 
-    print(f"\n=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-")
-    print(f'\n最終おすすめ番号達')
-    print(f"{result[:10]}")
-    print(f"\n=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-")
     acc_ave = cal_ave(config.MODEL_ACCURACY)
     loss_ave = cal_ave(config.MODEL_LOSS)
+    end_cal = time.perf_counter()
+    print(f"実行時間 [{(end_cal - start_cal):.4f}sec], 学習回数 [{try_select}回]")
+    print(f"\n=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-")
+    print(f'\n最終おすすめ番号達')
+    print(f"{list(result[:10])}")
+    print(f"モデルの正確度(正解が出る確率)\ntop6_accuracy < baseline : (6/43) x 6 ≈ 0.84 > = {acc_ave},\ntop6_accuracy < baseline : (10/43) x 6 ≈ 1.40 >top_10 = {loss_ave}\n")
+    print(f"\n=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-")
     save_results(result, config, acc_ave, loss_ave,filepath="loto6.json")
 
 if __name__ == '__main__':

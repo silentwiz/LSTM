@@ -12,6 +12,10 @@ import sys
 import logging
 import json
 import time
+import faulthandler
+
+
+
 # 로거 기본 설정
 logging.basicConfig(
     level=logging.INFO,  # INFO 이상 메시지를 출력
@@ -26,18 +30,18 @@ class Config:
         ROOT_DIR = os.getcwd()
         DB_DIR = os.path.join(ROOT_DIR,'database')
         self.JP_LOTO_FILE = os.path.join(DB_DIR,'japan_loto6.txt')
-        self.SEQUENCE_LENGTH = 30 ## default = 35? 2037 ~ 2004회에 걸쳐서 07이 반복되서 보이는 경향
+        self.SEQUENCE_LENGTH = 5 ## default = 35? 2037 ~ 2004회에 걸쳐서 07이 반복되서 보이는 경향
         self.SEQUENCE_LENGTHS = []
-        self.SEQUENCE_LENGTH_COUNT = 25 # List LENGTH
+        self.SEQUENCE_LENGTH_COUNT = 4 # repeat num
         #self.SEQUENCE_LENGTH_RANGE = 5 # not use
-        self.SEQUENCE_LENGTH_VALUE = 3 # distance
+        self.SEQUENCE_LENGTH_VALUE = 10 # distance
         self.RESULT_NUM = np.zeros(44, dtype=int)
         self.epochs = 100
         self.patience = 100
-        self.ENSEMBLE_COUNT = 30
+        self.ENSEMBLE_COUNT = 15
         self.MODEL_ACCURACY = []
         self.MODEL_LOSS = []
-        self.REST_POINT = 0.2
+        self.REST_POINT = 0.17
         #self.VALUE_RANDOME_STATE = [7,15,777]
 
 
@@ -128,7 +132,7 @@ def predict_next(model, latest_data):
     print("\n=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-")
     print(f"おすすめ番号達：{predicted_numbers[:15]}")
     print("=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-")
-    return predicted_numbers[:15]
+    return predicted_numbers[:8]
 
 
 def train_model(model, epochs,patience, X_train, X_test, Y_train, Y_test):
@@ -234,6 +238,7 @@ def cal_ave(some_list):
 
 def main():
     start_cal = time.perf_counter()
+    faulthandler.enable()
     print(f"TENSOR-FLOW are loaded : Version[{tf.__version__}]")
     gpu = len(tf.config.list_physical_devices('GPU'))>0
     print("GPU is", "available" if gpu else "NOT AVAILABLE")
@@ -280,7 +285,7 @@ def main():
             for num in result:
                 config.RESULT_NUM[num] += 1
             try_select += 1
-            
+
             # === 정리: 모델 객체 제거, 세션 클리어, 가비지 컬렉트 ===
             trained_model = None
             model = None

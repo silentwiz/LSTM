@@ -1,0 +1,41 @@
+{
+  "timestamp": "2025-10-13T09:15:27.977106",
+  "config": {
+    "SEQUENCE_LENGTH": 30,
+    "SEQUENCE_LENGTH_COUNT": 5,
+    "EPOCHS": 100,
+    "ENSEMBLE_COUNT": 5,
+    "REST_POINT": 0.3,
+    "top6_accuracy < baseline : (6/43) x 6 ≈ 0.84 >": 0.8512532237627981,
+    "top10_accuracy < baseline : (10/43) x 6 ≈ 1.40 >": 1.4154905282018706
+  },
+  "final_predictions": [
+    21,
+    12,
+    26,
+    38,
+    6,
+    4,
+    32,
+    33,
+    17,
+    20,
+    43,
+    34,
+    37,
+    10,
+    30
+  ],
+  "top_10_numbers": [
+    21,
+    12,
+    26,
+    38,
+    6,
+    4,
+    32,
+    33,
+    17,
+    20
+  ]
+}

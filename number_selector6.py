@@ -29,7 +29,8 @@ class Config:
     def __init__(self):
         ROOT_DIR = os.getcwd()
         DB_DIR = os.path.join(ROOT_DIR,'database')
-        self.JP_LOTO_FILE = os.path.join(DB_DIR,'japan_loto6.txt')
+        #self.JP_LOTO_FILE = os.path.join(DB_DIR,'japan_loto6.txt')
+        self.JP_LOTO_FILE = os.path.join(DB_DIR,'japan_loto6_preprocessed.csv')
         self.SEQUENCE_LENGTH = 5 ## default = 35? 2037 ~ 2004회에 걸쳐서 07이 반복되서 보이는 경향
         self.SEQUENCE_LENGTHS = []
         self.SEQUENCE_LENGTH_COUNT = 4 # repeat num
@@ -118,7 +119,7 @@ def predict_next(model, latest_data):
     
     sorted_number = np.argsort(probabilities)[::-1]
 
-    #print(" 次回の予測（上位１５位）")
+    #print(" 次の予測（上位１５位）")
     predicted_numbers = []
     for i in range(len(sorted_number)):
         number = sorted_number[i] + 1 # 인덱스는 0부터 시작하기에 +1을 해야 숫자가 표시된다.
@@ -306,7 +307,7 @@ def main():
     end_cal = time.perf_counter()
 
     print(f"\n=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-")
-    print(f"\n実行時間 [{(end_cal - start_cal):.1f}sec], 学習回数 [{try_select}回]")
+    print(f"\n実行時間 [{(end_cal - start_cal):.1f}sec], 学習数 [{try_select}]")
     print(f'\n最終おすすめ番号達')
     print(f"{list(result[:10])}")
     print(f"モデルの正確度(正解が出る確率)\ntop6_accuracy < baseline : (6/43) x 6 ≈ 0.84 > = {acc_ave},\ntop6_accuracy < baseline : (10/43) x 6 ≈ 1.40 >top_10 = {loss_ave}\n")

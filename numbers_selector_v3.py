@@ -24,12 +24,12 @@ class Config:
         ROOT_DIR = os.getcwd()
         DB_DIR = os.path.join(ROOT_DIR,'database')
         self.JP_LOTO_FILE = os.path.join(DB_DIR,'japan_loto6.txt')
-        self.SEQUENCE_LENGTHS = [30, 40, 50, 60, 70, 80, 90, 100]
-        self.RANDOM_STATES = [7, 42, 123, 2024, 777, 999, 1004, 888]
-        self.DROPOUT_RATES = [0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.3, 0.4]
+        self.SEQUENCE_LENGTHS = [4, 8, 16, 32, 48, 96, 192, 384] # 4 => 최근 2주, 8 => 최근 한달, 16=> 두달,
+        self.RANDOM_STATES = [20260518, 20260518, 20260518, 20260518, 20260518, 20260518, 20260518, 20260518]
+        self.DROPOUT_RATES = [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3]
         self.RESULT_NUM = np.zeros(46, dtype=int)
         self.epochs = 100
-        self.patience = 15
+        self.patience = 100
         self.ENSEMBLE_COUNT = 8
         self.MODEL_ACCURACY = []
         self.MODEL_LOSS = []
